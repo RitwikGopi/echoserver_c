@@ -19,8 +19,9 @@ int main(void){
     struct sockaddr_storage their_addr;
     socklen_t addr_size;
     struct addrinfo hints, *res;
-    int sockfd, new_fd;
+    int sockfd, new_fd, i, j;
     char s[INET6_ADDRSTRLEN];
+    int fdmax;
     
     memset(&hints, 0, sizeof hints);
     hints.ai_family = AF_UNSPEC;
@@ -38,6 +39,7 @@ int main(void){
 	perror("Socket Error");
 	return 2;
     }
+    printf("socket created no = %d\n", sockfd);
     if(bind(sockfd, res->ai_addr, res->ai_addrlen) == -1){
 	perror("BInd error");
 	return 3;
@@ -46,25 +48,52 @@ int main(void){
 	perror("listen error");
 	return 4;
     }
-
-
+    printf("listen fun over\n");
     addr_size = sizeof their_addr;
-    new_fd = accept(sockfd, (struct sockaddr *)&their_addr, &addr_size);
-    if(new_fd == -1){
-	perror("accept error");
-	return 5;
-    }
-    printf("client connected %s\n", s);
+    fd_set read_fds;
+    fd_set master;
+    FD_ZERO(&read_fds);
+    FD_ZERO(&master);
+    FD_SET(0, &master);
+    FD_SET(sockfd, &master);
+    fdmax = sockfd;
     while(1){
-	char buf[1024] ;
-	int buf_s = recv(new_fd, buf, 1023, 0);
-	printf("%s\n",buf);
-	if(buf_s == -1){
-	    perror("recv");
-	    return 6;
+	read_fds = master;
+	select(fdmax + 1, &read_fds, NULL, NULL, NULL);
+	for(i = 0; i <= fdmax; i++){
+	    if(FD_ISSET(i, &read_fds)){
+		if(i == 0){
+		    char buf[1024];
+		    printf("STDIN SELECTED\n");
+		    while(!fgets(buf, 1024, stdin));
+		}else if(i == sockfd){
+		    printf("Incoming request SELECTED\n");
+		    new_fd = accept(sockfd, 
+			    (struct sockaddr *)&their_addr, &addr_size);
+		    printf("cllient connected %d\n", new_fd);
+		    FD_SET(new_fd, &master);
+		    if(fdmax < new_fd)
+			fdmax = new_fd;
+		}else{
+		    printf("message from client %d\n", i);
+		    char buf[1024] = "";
+		    int nbytes = recv(i, buf, sizeof buf, 0);
+		    printf("NO of recv = %d,%d, %s\n", nbytes, 
+			    strlen(buf),buf);
+		    if(nbytes == 0){
+			printf("connection closed\n");
+			close(i);
+			FD_CLR(i, &master);
+		    }else{
+			for(j = sockfd + 1; j <= fdmax; j++){
+			    if(FD_ISSET(j, &master)){
+				printf("sending to %d\n", j);
+				send(j, buf, strlen(buf) + 1, 0);
+			    }
+			}
+		    }
+		}
+	    }
 	}
-	int send_s = send(new_fd, buf, strlen(buf)+1, 0);
-	printf("%d-%d\n", strlen(buf), send_s);
-	sleep(1);
     }
 }

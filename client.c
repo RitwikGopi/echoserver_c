@@ -46,11 +46,26 @@ int main(int argc, char *argv[]){
     }
 
     printf("connecting to server\n");
+
+    fd_set read_fds;
+    fd_set master;
+    FD_ZERO(&master);
+    FD_ZERO(&read_fds);
+    FD_SET(0, &master);
+    FD_SET(sockfd, &master);
     while(1){
-	char buf[1024];
-	while(!fgets(buf, 1024, stdin));
-	send(sockfd, buf, strlen(buf)+1, 0);
-	recv(sockfd, buf, 1023, 0);
-	printf("%s", buf);
+	char buf[1024] = "";
+	read_fds = master;
+	int nbytes;
+	select(sockfd + 1, &read_fds, NULL, NULL, NULL);
+	if(FD_ISSET(0, &read_fds)){
+	    while(!fgets(buf, 1024, stdin));
+	    nbytes = send(sockfd, buf, strlen(buf)+1, 0);
+	    //printf("number of bytes send = %d\n", nbytes);
+	}else{
+	    nbytes = recv(sockfd, buf, sizeof buf, 0);
+	    //printf("number of bytes recieved = %d\n", nbytes);
+	    printf("%s", buf);
+	}
     }
 }
